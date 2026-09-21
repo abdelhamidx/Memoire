@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environnement
+.env
+
+# dbt
+dbt_velib/target/
+dbt_velib/logs/
+dbt_velib/dbt_packages/
+
+# Data locale (ne pas versionner des exports de données)
+data/
+*.csv
+*.xlsx
+
+# Node (frontend)
+node_modules/
+dist/
+build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
