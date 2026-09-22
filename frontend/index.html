@@ -3,45 +3,154 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Vélib' Prévision - Carte des stations</title>
+<title>Vélib' Prévision</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚲</text></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  html, body { height: 100%; margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-  #map { height: 100%; width: 100%; }
+  :root {
+    --bg: #0b1220;
+    --panel: rgba(15, 23, 42, 0.88);
+    --panel-border: rgba(255,255,255,0.08);
+    --text: #e5e9f0;
+    --text-dim: #93a0b4;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --gray: #64748b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); }
+  #map { height: 100%; width: 100%; filter: saturate(0.9); }
 
   #panel {
     position: absolute;
-    top: 12px;
-    left: 12px;
+    top: 16px;
+    left: 16px;
     z-index: 1000;
-    background: rgba(255, 255, 255, 0.95);
-    padding: 14px 18px;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    max-width: 280px;
+    background: var(--panel);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    padding: 18px 20px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    width: 300px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
   }
-  #panel h1 { font-size: 16px; margin: 0 0 4px 0; }
-  #panel p { font-size: 12px; color: #555; margin: 0 0 10px 0; }
-  #panel .stat { font-size: 13px; margin: 2px 0; }
-  #panel .stat b { color: #111; }
+  #panel::-webkit-scrollbar { width: 6px; }
+  #panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
 
-  .legend { font-size: 12px; margin-top: 10px; }
-  .legend-item { display: flex; align-items: center; margin: 3px 0; }
-  .legend-dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+  #panel h1 {
+    font-size: 17px;
+    font-weight: 800;
+    margin: 0 0 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.02em;
+  }
+  #panel .subtitle { font-size: 12px; color: var(--text-dim); margin: 0 0 14px 0; }
+
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .kpi {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+  .kpi .kpi-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .kpi .kpi-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
 
   #search {
     width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    margin-top: 8px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
     font-size: 13px;
+    outline: none;
+    font-family: inherit;
+  }
+  #search::placeholder { color: var(--text-dim); }
+  #search:focus { border-color: var(--accent); }
+
+  #toggle-mode {
+    width: 100%;
+    margin-top: 10px;
+    padding: 9px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    background: linear-gradient(135deg, #1d4ed8, #0ea5e9);
+    color: white;
+    font-weight: 600;
+    font-size: 12.5px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+  }
+  #toggle-mode:hover { box-shadow: 0 4px 16px rgba(14,165,233,0.4); }
+  #toggle-mode:active { transform: scale(0.98); }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 16px 0 8px 0;
   }
 
-  .station-popup h3 { margin: 0 0 6px 0; font-size: 14px; }
-  .station-popup .row { font-size: 13px; margin: 2px 0; }
-  .station-popup .updated { font-size: 11px; color: #888; margin-top: 6px; }
+  .legend { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+  .legend-item { display: flex; align-items: center; font-size: 11.5px; color: var(--text-dim); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+
+  #risk-list { display: flex; flex-direction: column; gap: 6px; }
+  .risk-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 8px;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .risk-item:hover { background: rgba(239,68,68,0.18); }
+  .risk-item .risk-name { font-size: 12px; font-weight: 500; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .risk-item .risk-value { font-size: 12px; font-weight: 700; color: var(--red); }
+  #risk-empty { font-size: 12px; color: var(--text-dim); font-style: italic; }
+
+  .station-popup { font-family: 'Inter', sans-serif; min-width: 210px; }
+  .station-popup h3 { margin: 0 0 8px 0; font-size: 14px; }
+  .station-popup .row { font-size: 12.5px; margin: 3px 0; color: #333; }
+  .station-popup .updated { font-size: 10.5px; color: #999; margin-top: 8px; }
+  .station-popup .sparkline-wrap { margin-top: 8px; }
+  .station-popup .sparkline-label { font-size: 10px; color: #999; margin-bottom: 2px; }
+
+  .leaflet-popup-content-wrapper { border-radius: 10px; }
+
+  /* Pulsation pour les stations vides */
+  .marker-critical path {
+    animation: pulse-ring 1.6s ease-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  @keyframes pulse-ring {
+    0%   { transform: scale(1); opacity: 1; }
+    70%  { transform: scale(2.2); opacity: 0; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  .attribution-fade { opacity: 0.5; }
 </style>
 </head>
 <body>
@@ -49,113 +158,299 @@
 <div id="map"></div>
 
 <div id="panel">
-  <h1>🚲 Vélib' Prévision</h1>
-  <p>État des stations en temps réel</p>
-  <div class="stat">Stations affichées : <b id="stat-count">-</b></div>
-  <div class="stat">Vélos disponibles (total) : <b id="stat-bikes">-</b></div>
-  <div class="stat">Dernière mise à jour : <b id="stat-updated">-</b></div>
+  <h1>🚲 Vélib&rsquo; Prévision</h1>
+  <p class="subtitle">Disponibilité en temps réel &amp; prédiction ML</p>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">Stations</div>
+      <div class="kpi-value" id="stat-count">–</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Vélos dispo.</div>
+      <div class="kpi-value" id="stat-bikes">–</div>
+    </div>
+  </div>
+  <div style="font-size:11px; color:var(--text-dim); margin-top:-8px; margin-bottom:12px;">
+    Mise à jour : <span id="stat-updated">–</span>
+  </div>
 
   <input id="search" type="text" placeholder="Rechercher une station..." />
+  <div id="search-feedback" style="font-size:11px; color:var(--text-dim); margin-top:4px; min-height:14px;"></div>
 
+  <button id="toggle-mode">📍 Affichage : État actuel</button>
+
+  <div class="section-title">🚨 Stations à risque (vides)</div>
+  <div id="risk-list"><div id="risk-empty">Chargement...</div></div>
+
+  <div class="section-title">Légende</div>
   <div class="legend">
-    <div class="legend-item"><span class="legend-dot" style="background:#2ecc71"></span> Beaucoup de vélos</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#f39c12"></span> Peu de vélos</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#e74c3c"></span> Station vide</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#95a5a6"></span> Station pleine (docks)</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> Beaucoup de vélos</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> Peu de vélos</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--red)"></span> Station vide</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--gray)"></span> Donnée indisponible</div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
-  const map = L.map('map').setView([48.8566, 2.3522], 12); // Paris
+  const map = L.map('map', { zoomControl: false }).setView([48.8566, 2.3522], 12);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  let markers = [];
-  let allStations = [];
+  const clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 45,
+    iconCreateFunction: function(cluster) {
+      const markers = cluster.getAllChildMarkers();
+      let sum = 0, n = 0;
+      markers.forEach(m => {
+        if (m.options.__value != null) { sum += m.options.__value; n++; }
+      });
+      const avg = n ? sum / n : 0;
+      let color = "#64748b";
+      if (avg > 0) color = avg < 3 ? "#f59e0b" : "#22c55e";
+      if (n && avg === 0) color = "#ef4444";
+      const size = cluster.getChildCount() < 10 ? 34 : cluster.getChildCount() < 50 ? 40 : 48;
+      return L.divIcon({
+        html: `<div style="
+          background:${color};
+          color:white;
+          width:${size}px;height:${size}px;
+          border-radius:50%;
+          display:flex;align-items:center;justify-content:center;
+          font-weight:700; font-family:Inter,sans-serif; font-size:12px;
+          border:2px solid rgba(255,255,255,0.8);
+          box-shadow:0 2px 8px rgba(0,0,0,0.35);
+        ">${cluster.getChildCount()}</div>`,
+        className: '',
+        iconSize: L.point(size, size)
+      });
+    }
+  });
+  map.addLayer(clusterGroup);
 
-  function colorFor(station) {
-    if (station.num_bikes_available === null || station.num_bikes_available === undefined) return "#95a5a6";
-    if (station.num_bikes_available === 0) return "#e74c3c";
-    const ratio = station.capacity ? station.num_bikes_available / station.capacity : 0;
-    if (ratio < 0.2) return "#f39c12";
-    return "#2ecc71";
+  let allStations = [];
+  let predictionsByStation = {};
+  let mode = "current"; // "current" | "predicted"
+  let lastFiltered = null;
+  const sparklineCache = {};
+
+  function valueFor(station) {
+    if (mode === "predicted") {
+      const p = predictionsByStation[station.station_id];
+      return p ? p.predicted_num_bikes_available : null;
+    }
+    return station.num_bikes_available;
   }
 
-  function popupContent(s) {
+  function colorFor(value, capacity) {
+    if (value === null || value === undefined) return "#64748b";
+    if (value <= 0) return "#ef4444";
+    const ratio = capacity ? value / capacity : 0;
+    if (ratio < 0.2) return "#f59e0b";
+    return "#22c55e";
+  }
+
+  function buildSparklineSVG(history) {
+    if (!history || history.length < 2) {
+      return '<div style="font-size:11px;color:#999;">Historique insuffisant</div>';
+    }
+    const values = history.map(h => h.num_bikes_available);
+    const min = Math.min(...values), max = Math.max(...values);
+    const w = 190, h = 40, pad = 3;
+    const range = (max - min) || 1;
+    const pts = values.map((v, i) => {
+      const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+      const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    const last = values[values.length - 1];
+    const lastColor = colorFor(last, null);
+    const lastPt = pts.split(" ").pop().split(",");
+    return `
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+        <polyline points="${pts}" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="2.5" fill="${lastColor}" />
+      </svg>
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:#999;">
+        <span>min ${min}</span><span>max ${max}</span>
+      </div>
+    `;
+  }
+
+  async function popupContent(s) {
     const updated = s.collected_at ? new Date(s.collected_at).toLocaleTimeString('fr-FR') : '—';
+    const pred = predictionsByStation[s.station_id];
+    const predRow = pred
+      ? `<div class="row">🔮 Prédiction (prochaine collecte) : <b>${pred.predicted_num_bikes_available}</b></div>`
+      : `<div class="row" style="color:#999;">Prédiction non disponible</div>`;
+
     return `
       <div class="station-popup">
         <h3>${s.name}</h3>
         <div class="row">🚲 Vélos disponibles : <b>${s.num_bikes_available ?? '—'}</b></div>
+        ${predRow}
         <div class="row">🅿️ Docks libres : <b>${s.num_docks_available ?? '—'}</b></div>
         <div class="row">Capacité totale : ${s.capacity ?? '—'}</div>
+        <div class="sparkline-wrap">
+          <div class="sparkline-label">Historique récent</div>
+          <div id="spark-${s.station_id}">Chargement du graphique...</div>
+        </div>
         <div class="updated">Mis à jour à ${updated}</div>
       </div>
     `;
   }
 
+  async function loadSparkline(stationId) {
+    const el = document.getElementById(`spark-${stationId}`);
+    if (!el) return;
+    try {
+      if (!sparklineCache[stationId]) {
+        const res = await fetch(`/stations/${stationId}/history?limit=50`);
+        sparklineCache[stationId] = await res.json();
+      }
+      el.innerHTML = buildSparklineSVG(sparklineCache[stationId]);
+    } catch (err) {
+      el.innerHTML = '<div style="font-size:11px;color:#999;">Indisponible</div>';
+    }
+  }
+
   async function loadStations() {
     try {
-      const res = await fetch('/stations');
-      const stations = await res.json();
+      const [stationsRes, predictionsRes] = await Promise.all([
+        fetch('/stations'),
+        fetch('/predictions').catch(() => null)
+      ]);
+      const stations = await stationsRes.json();
       allStations = stations;
-      renderMarkers(stations);
+
+      predictionsByStation = {};
+      if (predictionsRes && predictionsRes.ok) {
+        const predictions = await predictionsRes.json();
+        predictions.forEach(p => { predictionsByStation[p.station_id] = p; });
+      }
+
+      renderMarkers(lastFiltered || stations);
       updatePanel(stations);
+      updateRiskList(stations);
     } catch (err) {
-      document.getElementById('stat-count').textContent = "erreur de chargement";
+      document.getElementById('stat-count').textContent = "erreur";
       console.error(err);
     }
   }
 
   function renderMarkers(stations) {
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
+    clusterGroup.clearLayers();
 
     stations.forEach(s => {
       if (s.lat == null || s.lon == null) return;
+      const value = valueFor(s);
+      const color = colorFor(value, s.capacity);
+      const isCritical = value === 0;
+
       const marker = L.circleMarker([s.lat, s.lon], {
         radius: 6,
-        fillColor: colorFor(s),
-        color: "#333",
-        weight: 1,
-        opacity: 0.8,
-        fillOpacity: 0.85
-      }).bindPopup(popupContent(s));
-      marker.addTo(map);
-      markers.push(marker);
+        fillColor: color,
+        color: "#fff",
+        weight: 1.5,
+        opacity: 0.9,
+        fillOpacity: 0.9,
+        __value: value,
+        className: isCritical ? "marker-critical" : ""
+      });
+
+      marker.on('popupopen', async () => {
+        const content = await popupContent(s);
+        marker.setPopupContent(content);
+        loadSparkline(s.station_id);
+      });
+      marker.bindPopup('<div style="padding:8px;">Chargement...</div>');
+
+      clusterGroup.addLayer(marker);
     });
   }
 
   function updatePanel(stations) {
     document.getElementById('stat-count').textContent = stations.length;
     const totalBikes = stations.reduce((sum, s) => sum + (s.num_bikes_available || 0), 0);
-    document.getElementById('stat-bikes').textContent = totalBikes;
-    const latest = stations
-      .map(s => s.collected_at)
-      .filter(Boolean)
-      .sort()
-      .pop();
+    document.getElementById('stat-bikes').textContent = totalBikes.toLocaleString('fr-FR');
+    const latest = stations.map(s => s.collected_at).filter(Boolean).sort().pop();
     document.getElementById('stat-updated').textContent = latest
       ? new Date(latest).toLocaleTimeString('fr-FR')
       : '—';
   }
 
+  function updateRiskList(stations) {
+    const risky = stations
+      .filter(s => s.num_bikes_available === 0)
+      .sort((a, b) => (b.capacity || 0) - (a.capacity || 0))
+      .slice(0, 6);
+
+    const container = document.getElementById('risk-list');
+    if (risky.length === 0) {
+      container.innerHTML = '<div id="risk-empty">Aucune station vide en ce moment 🎉</div>';
+      return;
+    }
+    container.innerHTML = risky.map(s => `
+      <div class="risk-item" data-lat="${s.lat}" data-lon="${s.lon}">
+        <span class="risk-name">${s.name}</span>
+        <span class="risk-value">0 / ${s.capacity ?? '?'}</span>
+      </div>
+    `).join("");
+
+    container.querySelectorAll('.risk-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const lat = parseFloat(el.dataset.lat), lon = parseFloat(el.dataset.lon);
+        map.flyTo([lat, lon], 17, { duration: 0.8 });
+      });
+    });
+  }
+
+  document.getElementById('toggle-mode').addEventListener('click', () => {
+    mode = mode === "current" ? "predicted" : "current";
+    document.getElementById('toggle-mode').textContent =
+      mode === "current" ? "📍 Affichage : État actuel" : "🔮 Affichage : Prédiction";
+    renderMarkers(lastFiltered || allStations);
+  });
+
   document.getElementById('search').addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
-    if (!q) { renderMarkers(allStations); return; }
+    const feedback = document.getElementById('search-feedback');
+
+    if (!q) {
+      lastFiltered = null;
+      feedback.textContent = "";
+      renderMarkers(allStations);
+      return;
+    }
+
     const filtered = allStations.filter(s => s.name.toLowerCase().includes(q));
+    lastFiltered = filtered;
     renderMarkers(filtered);
+
+    if (filtered.length === 0) {
+      feedback.textContent = "Aucune station trouvée";
+      feedback.style.color = "var(--red)";
+    } else {
+      feedback.textContent = `${filtered.length} station${filtered.length > 1 ? "s" : ""} trouvée${filtered.length > 1 ? "s" : ""}`;
+      feedback.style.color = "var(--accent)";
+    }
+
     if (filtered.length === 1) {
-      map.setView([filtered[0].lat, filtered[0].lon], 16);
+      map.flyTo([filtered[0].lat, filtered[0].lon], 16, { duration: 0.8 });
+    } else if (filtered.length > 1) {
+      const bounds = L.latLngBounds(filtered.map(s => [s.lat, s.lon]));
+      map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 15, duration: 0.8 });
     }
   });
 
   loadStations();
-  setInterval(loadStations, 60000); // rafraîchit toutes les minutes
+  setInterval(loadStations, 60000);
 </script>
 
 </body>

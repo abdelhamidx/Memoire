@@ -106,6 +106,80 @@ def get_station(station_id: str):
     return dict(row)
 
 
+@app.get("/stations/{station_id}/history")
+def station_history(station_id: str, limit: int = 50):
+    """Historique récent d'une station (pour le mini-graphique de la carte)."""
+    query = text("""
+        select collected_at, num_bikes_available
+        from dbt_dev.silver_station_status
+        where station_id = :station_id
+        order by collected_at desc
+        limit :limit
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"station_id": station_id, "limit": limit}).mappings().all()
+    return list(reversed([dict(r) for r in rows]))
+
+
+@app.get("/predictions")
+def predict_all_stations():
+    """
+    Prédiction en lot pour TOUTES les stations en une seule fois (un seul
+    appel au modèle), utilisé par la carte pour éviter 1500+ requêtes
+    individuelles. Voir /predict/{station_id} pour la version unitaire.
+    """
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Modèle non disponible (ml_models/xgb_baseline.joblib introuvable).",
+        )
+
+    query = text("""
+        select station_id, collected_at, num_bikes_available
+        from (
+            select
+                station_id, collected_at, num_bikes_available,
+                row_number() over (partition by station_id order by collected_at desc) as rn
+            from dbt_dev.silver_station_status
+        ) ranked
+        where rn <= :n_lags
+        order by station_id, collected_at desc
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"n_lags": N_LAGS}).mappings().all()
+
+    by_station: dict[str, list] = {}
+    for r in rows:
+        by_station.setdefault(r["station_id"], []).append(r)
+
+    station_ids, features, currents, based_on = [], [], [], []
+    for sid, recs in by_station.items():
+        if len(recs) < N_LAGS:
+            continue
+        recs = sorted(recs, key=lambda r: r["collected_at"], reverse=True)
+        now = recs[0]["collected_at"]
+        lags = [r["num_bikes_available"] for r in recs[:N_LAGS]]
+        station_ids.append(sid)
+        features.append([now.hour, now.weekday(), lags[0], lags[1], lags[2]])
+        currents.append(lags[0])
+        based_on.append(now)
+
+    if not station_ids:
+        return []
+
+    predictions = model.predict(features)
+
+    return [
+        {
+            "station_id": sid,
+            "current_num_bikes_available": cur,
+            "predicted_num_bikes_available": round(float(p), 1),
+            "based_on_collected_at": bo,
+        }
+        for sid, cur, p, bo in zip(station_ids, currents, predictions, based_on)
+    ]
+
+
 @app.get("/predict/{station_id}")
 def predict_station(station_id: str):
     """
