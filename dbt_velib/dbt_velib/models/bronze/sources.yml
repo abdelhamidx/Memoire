@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: bronze
+    tables:
+      - name: station_status_raw
+      - name: station_information_raw
