@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vélib' Prévision - Carte des stations</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { height: 100%; margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+  #map { height: 100%; width: 100%; }
+
+  #panel {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 14px 18px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    max-width: 280px;
+  }
+  #panel h1 { font-size: 16px; margin: 0 0 4px 0; }
+  #panel p { font-size: 12px; color: #555; margin: 0 0 10px 0; }
+  #panel .stat { font-size: 13px; margin: 2px 0; }
+  #panel .stat b { color: #111; }
+
+  .legend { font-size: 12px; margin-top: 10px; }
+  .legend-item { display: flex; align-items: center; margin: 3px 0; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+
+  #search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    margin-top: 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .station-popup h3 { margin: 0 0 6px 0; font-size: 14px; }
+  .station-popup .row { font-size: 13px; margin: 2px 0; }
+  .station-popup .updated { font-size: 11px; color: #888; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="panel">
+  <h1>🚲 Vélib' Prévision</h1>
+  <p>État des stations en temps réel</p>
+  <div class="stat">Stations affichées : <b id="stat-count">-</b></div>
+  <div class="stat">Vélos disponibles (total) : <b id="stat-bikes">-</b></div>
+  <div class="stat">Dernière mise à jour : <b id="stat-updated">-</b></div>
+
+  <input id="search" type="text" placeholder="Rechercher une station..." />
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#2ecc71"></span> Beaucoup de vélos</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#f39c12"></span> Peu de vélos</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#e74c3c"></span> Station vide</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#95a5a6"></span> Station pleine (docks)</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map').setView([48.8566, 2.3522], 12); // Paris
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  let markers = [];
+  let allStations = [];
+
+  function colorFor(station) {
+    if (station.num_bikes_available === null || station.num_bikes_available === undefined) return "#95a5a6";
+    if (station.num_bikes_available === 0) return "#e74c3c";
+    const ratio = station.capacity ? station.num_bikes_available / station.capacity : 0;
+    if (ratio < 0.2) return "#f39c12";
+    return "#2ecc71";
+  }
+
+  function popupContent(s) {
+    const updated = s.collected_at ? new Date(s.collected_at).toLocaleTimeString('fr-FR') : '—';
+    return `
+      <div class="station-popup">
+        <h3>${s.name}</h3>
+        <div class="row">🚲 Vélos disponibles : <b>${s.num_bikes_available ?? '—'}</b></div>
+        <div class="row">🅿️ Docks libres : <b>${s.num_docks_available ?? '—'}</b></div>
+        <div class="row">Capacité totale : ${s.capacity ?? '—'}</div>
+        <div class="updated">Mis à jour à ${updated}</div>
+      </div>
+    `;
+  }
+
+  async function loadStations() {
+    try {
+      const res = await fetch('/stations');
+      const stations = await res.json();
+      allStations = stations;
+      renderMarkers(stations);
+      updatePanel(stations);
+    } catch (err) {
+      document.getElementById('stat-count').textContent = "erreur de chargement";
+      console.error(err);
+    }
+  }
+
+  function renderMarkers(stations) {
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    stations.forEach(s => {
+      if (s.lat == null || s.lon == null) return;
+      const marker = L.circleMarker([s.lat, s.lon], {
+        radius: 6,
+        fillColor: colorFor(s),
+        color: "#333",
+        weight: 1,
+        opacity: 0.8,
+        fillOpacity: 0.85
+      }).bindPopup(popupContent(s));
+      marker.addTo(map);
+      markers.push(marker);
+    });
+  }
+
+  function updatePanel(stations) {
+    document.getElementById('stat-count').textContent = stations.length;
+    const totalBikes = stations.reduce((sum, s) => sum + (s.num_bikes_available || 0), 0);
+    document.getElementById('stat-bikes').textContent = totalBikes;
+    const latest = stations
+      .map(s => s.collected_at)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    document.getElementById('stat-updated').textContent = latest
+      ? new Date(latest).toLocaleTimeString('fr-FR')
+      : '—';
+  }
+
+  document.getElementById('search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) { renderMarkers(allStations); return; }
+    const filtered = allStations.filter(s => s.name.toLowerCase().includes(q));
+    renderMarkers(filtered);
+    if (filtered.length === 1) {
+      map.setView([filtered[0].lat, filtered[0].lon], 16);
+    }
+  });
+
+  loadStations();
+  setInterval(loadStations, 60000); // rafraîchit toutes les minutes
+</script>
+
+</body>
+</html>
