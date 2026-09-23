@@ -99,6 +99,52 @@
   #toggle-mode:hover { box-shadow: 0 4px 16px rgba(14,165,233,0.4); }
   #toggle-mode:active { transform: scale(0.98); }
 
+  #horizon-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .horizon-btn {
+    flex: 1;
+    padding: 7px 4px;
+    border-radius: 8px;
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.05);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .horizon-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+  .horizon-btn.active {
+    background: linear-gradient(135deg, #1d4ed8, #0ea5e9);
+    color: white;
+    border-color: transparent;
+  }
+
+  #weather-badge {
+    display: none;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    align-items: center;
+    gap: 12px;
+  }
+  #weather-badge.visible { display: flex; }
+  #weather-badge b { color: var(--text); }
+  #weather-note {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-style: italic;
+  }
+
   .section-title {
     font-size: 11px;
     font-weight: 700;
@@ -214,7 +260,19 @@
   <input id="search" type="text" placeholder="Rechercher une station..." />
   <div id="search-feedback" style="font-size:11px; color:var(--text-dim); margin-top:4px; min-height:14px;"></div>
 
-  <button id="toggle-mode">📍 Affichage : État actuel</button>
+  <div class="section-title" style="margin-top:12px;">Affichage</div>
+  <div id="horizon-row">
+    <button class="horizon-btn active" data-horizon="">Actuel</button>
+    <button class="horizon-btn" data-horizon="15">+15 min</button>
+    <button class="horizon-btn" data-horizon="30">+30 min</button>
+    <button class="horizon-btn" data-horizon="60">+60 min</button>
+  </div>
+  <div id="weather-badge">
+    <span>🌡️ <b id="weather-temp">–</b></span>
+    <span>🌧️ <b id="weather-precip">–</b></span>
+    <span>💨 <b id="weather-wind">–</b></span>
+  </div>
+  <div id="weather-note"></div>
 
   <div class="section-title">🚨 Stations à risque (vides)</div>
   <div id="risk-list"><div id="risk-empty">Chargement...</div></div>
@@ -282,6 +340,7 @@
   let allStations = [];
   let predictionsByStation = {};
   let mode = "current"; // "current" | "predicted"
+  let currentHorizon = ""; // "" (actuel) | "15" | "30" | "60"
   let lastFiltered = null;
   const sparklineCache = {};
 
@@ -344,8 +403,10 @@
   async function popupContent(s) {
     const updated = s.collected_at ? new Date(s.collected_at).toLocaleTimeString('fr-FR') : '—';
     const pred = predictionsByStation[s.station_id];
+    const horizonLabel = currentHorizon ? `dans ${currentHorizon} min` : "prochaine collecte";
     const predRow = pred
-      ? `<div class="row">🔮 Prédiction (prochaine collecte) : <b>${pred.predicted_num_bikes_available}</b></div>`
+      ? `<div class="row">🔮 Prédiction (${horizonLabel}) : <b>${pred.predicted_num_bikes_available}</b>`
+        + (pred.model ? ` <span style="font-size:10px;color:#999;">(${pred.model})</span>` : "") + `</div>`
       : `<div class="row" style="color:#999;">Prédiction non disponible</div>`;
 
     return `
@@ -378,12 +439,43 @@
     }
   }
 
+  function horizonSuffix() {
+    return currentHorizon ? `?horizon_minutes=${currentHorizon}` : "";
+  }
+
+  async function loadWeather() {
+    const badge = document.getElementById('weather-badge');
+    const note = document.getElementById('weather-note');
+    if (!currentHorizon) {
+      badge.classList.remove('visible');
+      note.textContent = "";
+      return;
+    }
+    try {
+      const res = await fetch('/weather/latest');
+      const w = await res.json();
+      if (!w.available) {
+        badge.classList.remove('visible');
+        note.textContent = "Météo indisponible pour l'instant.";
+        return;
+      }
+      document.getElementById('weather-temp').textContent = `${w.temperature_c ?? '–'}°C`;
+      document.getElementById('weather-precip').textContent = `${w.precipitation_mm ?? '–'} mm`;
+      document.getElementById('weather-wind').textContent = `${w.wind_speed_kmh ?? '–'} km/h`;
+      badge.classList.add('visible');
+      note.textContent = "Météo utilisée par le modèle pour cette prédiction (dernier relevé connu).";
+    } catch (err) {
+      badge.classList.remove('visible');
+      note.textContent = "";
+    }
+  }
+
   async function loadStations() {
     try {
       const [stationsRes, predictionsRes, rebalancingRes] = await Promise.all([
         fetch('/stations'),
-        fetch('/predictions').catch(() => null),
-        fetch('/rebalancing').catch(() => null)
+        fetch(`/predictions${horizonSuffix()}`).catch(() => null),
+        fetch(`/rebalancing${horizonSuffix()}`).catch(() => null)
       ]);
       const stations = await stationsRes.json();
       allStations = stations;
@@ -403,6 +495,7 @@
       updatePanel(stations);
       updateRiskList(stations);
       updateRebalancingList(rebalancing);
+      loadWeather();
     } catch (err) {
       document.getElementById('stat-count').textContent = "erreur";
       console.error(err);
@@ -522,11 +615,14 @@
     });
   }
 
-  document.getElementById('toggle-mode').addEventListener('click', () => {
-    mode = mode === "current" ? "predicted" : "current";
-    document.getElementById('toggle-mode').textContent =
-      mode === "current" ? "📍 Affichage : État actuel" : "🔮 Affichage : Prédiction";
-    renderMarkers(lastFiltered || allStations);
+  document.querySelectorAll('.horizon-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.horizon-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentHorizon = btn.dataset.horizon;
+      mode = currentHorizon ? "predicted" : "current";
+      loadStations();
+    });
   });
 
   document.getElementById('search').addEventListener('input', (e) => {

@@ -331,6 +331,32 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/weather/latest")
+def weather_latest():
+    """
+    Dernier relevé météo connu, tel qu'utilisé par les modèles de prédiction
+    multi-horizon (voir get_latest_weather / predict_horizon). Sert
+    uniquement d'affichage côté frontend — les endpoints de prédiction
+    récupèrent cette même donnée en interne, indépendamment de cet appel.
+    """
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            select collected_at, temperature_c, precipitation_mm, wind_speed_kmh
+            from dbt_dev.silver_weather
+            order by collected_at desc
+            limit 1
+        """)).mappings().first()
+    if row is None:
+        return {"available": False}
+    return {
+        "available": True,
+        "collected_at": row["collected_at"],
+        "temperature_c": row["temperature_c"],
+        "precipitation_mm": row["precipitation_mm"],
+        "wind_speed_kmh": row["wind_speed_kmh"],
+    }
+
+
 @app.get("/stations")
 def list_stations():
     """Liste toutes les stations avec leur dernier état connu (couche silver)."""

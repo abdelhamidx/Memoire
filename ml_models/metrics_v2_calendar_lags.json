@@ -1,0 +1,39 @@
+{
+  "step_minutes_observed": 5.0385553,
+  "features": [
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "is_holiday",
+    "lag_1",
+    "lag_2",
+    "lag_3"
+  ],
+  "n_lags": 3,
+  "horizons": {
+    "15": {
+      "steps": 3,
+      "mae_model": 3.901,
+      "mae_baseline": 1.93,
+      "use_model": false,
+      "n_train_rows": 118170,
+      "n_lags": 3
+    },
+    "30": {
+      "steps": 6,
+      "mae_model": 3.733,
+      "mae_baseline": 2.883,
+      "use_model": false,
+      "n_train_rows": 113625,
+      "n_lags": 3
+    },
+    "60": {
+      "steps": 12,
+      "mae_model": 4.996,
+      "mae_baseline": 4.526,
+      "use_model": false,
+      "n_train_rows": 104535,
+      "n_lags": 3
+    }
+  }
+}
