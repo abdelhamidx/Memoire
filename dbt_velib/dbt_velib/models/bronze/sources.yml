@@ -5,4 +5,17 @@ sources:
     schema: bronze
     tables:
       - name: station_status_raw
+        columns:
+          - name: station_id
+            tests:
+              - not_null
+          - name: collected_at
+            tests:
+              - not_null
       - name: station_information_raw
+        columns:
+          - name: station_id
+            tests:
+              - not_null
+              - unique
+      - name: weather_raw

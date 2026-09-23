@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: silver_station_status
+    description: >
+      État de disponibilité des stations, nettoyé et dédupliqué (une ligne
+      par station et par instant de collecte, filtré sur les stations
+      installées avec une valeur de vélos disponibles non nulle).
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+      - name: collected_at
+        tests:
+          - not_null
+      - name: num_bikes_available
+        tests:
+          - not_null
+
+  - name: silver_station_information
+    description: >
+      Informations statiques des stations (une ligne par station : nom,
+      position, capacité), dédupliquées sur la version la plus récente.
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+          - unique
+      - name: lat
+        tests:
+          - not_null
+      - name: lon
+        tests:
+          - not_null
+      - name: capacity
+        tests:
+          - not_null
+
+  - name: silver_weather
+    description: Relevés météo (température, précipitations, vent) pour Paris.
+    columns:
+      - name: collected_at
+        tests:
+          - not_null
+      - name: temperature_c
+        tests:
+          - not_null

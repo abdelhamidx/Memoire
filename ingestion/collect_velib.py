@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 STATION_STATUS_URL = os.environ["VELIB_STATION_STATUS_URL"]
 STATION_INFO_URL = os.environ["VELIB_STATION_INFO_URL"]
 COLLECT_INTERVAL_MINUTES = int(os.environ.get("COLLECT_INTERVAL_MINUTES", 5))
+WEATHER_API_URL = os.environ.get("WEATHER_API_URL", "https://api.open-meteo.com/v1/forecast")
+# Coordonnées de Paris centre : suffisant pour une feature météo à l'échelle de la ville
+PARIS_LAT = 48.8566
+PARIS_LON = 2.3522
 
 DB_URL = (
     f"postgresql+psycopg2://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}"
@@ -64,6 +68,15 @@ def ensure_bronze_tables(engine):
                 lon DOUBLE PRECISION,
                 capacity INT,
                 collected_at TIMESTAMPTZ NOT NULL
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bronze.weather_raw (
+                id SERIAL PRIMARY KEY,
+                collected_at TIMESTAMPTZ NOT NULL,
+                temperature_c DOUBLE PRECISION,
+                precipitation_mm DOUBLE PRECISION,
+                wind_speed_kmh DOUBLE PRECISION
             )
         """))
 
@@ -129,11 +142,42 @@ def store_station_information(engine, stations: list[dict], collected_at: dateti
     logger.info("✓ %d stations (information) mises à jour", len(rows))
 
 
+def fetch_weather() -> dict:
+    params = {
+        "latitude": PARIS_LAT,
+        "longitude": PARIS_LON,
+        "current": "temperature_2m,precipitation,wind_speed_10m",
+        "timezone": "UTC",
+    }
+    resp = requests.get(WEATHER_API_URL, params=params, timeout=15)
+    resp.raise_for_status()
+    return resp.json()["current"]
+
+
+def store_weather(engine, weather: dict, collected_at: datetime):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO bronze.weather_raw (collected_at, temperature_c, precipitation_mm, wind_speed_kmh)
+            VALUES (:collected_at, :temperature_c, :precipitation_mm, :wind_speed_kmh)
+        """), {
+            "collected_at": collected_at,
+            "temperature_c": weather.get("temperature_2m"),
+            "precipitation_mm": weather.get("precipitation"),
+            "wind_speed_kmh": weather.get("wind_speed_10m"),
+        })
+    logger.info("✓ météo enregistrée (%.1f°C, %.1fmm pluie)",
+                weather.get("temperature_2m", 0), weather.get("precipitation", 0))
+
+
 def collect_once(engine):
     now = datetime.now(timezone.utc)
     logger.info("Collecte à %s", now.isoformat())
     store_station_status(engine, fetch_station_status(), now)
     store_station_information(engine, fetch_station_information(), now)
+    try:
+        store_weather(engine, fetch_weather(), now)
+    except Exception:
+        logger.exception("Erreur météo (non bloquant, on garde le reste de la collecte)")
 
 
 def main():
