@@ -151,6 +151,42 @@
   }
 
   .attribution-fade { opacity: 0.5; }
+
+  #rebalancing-list { display: flex; flex-direction: column; gap: 6px; }
+  .rebalance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 8px;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    border: 1px solid;
+  }
+  .rebalance-item.penurie {
+    background: rgba(245,158,11,0.08);
+    border-color: rgba(245,158,11,0.3);
+  }
+  .rebalance-item.penurie:hover { background: rgba(245,158,11,0.18); }
+  .rebalance-item.saturation {
+    background: rgba(56,189,248,0.08);
+    border-color: rgba(56,189,248,0.3);
+  }
+  .rebalance-item.saturation:hover { background: rgba(56,189,248,0.18); }
+  .rebalance-item .rb-name { font-size: 12px; font-weight: 500; max-width: 155px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rebalance-item .rb-value { font-size: 11px; font-weight: 700; }
+  .rebalance-item.penurie .rb-value { color: var(--orange); }
+  .rebalance-item.saturation .rb-value { color: var(--accent); }
+  #rebalancing-empty { font-size: 12px; color: var(--text-dim); font-style: italic; }
+
+  .marker-rebalance-ring {
+    border-radius: 50%;
+    animation: pulse-ring-outline 1.8s ease-out infinite;
+  }
+  @keyframes pulse-ring-outline {
+    0%   { transform: scale(0.8); opacity: 0.9; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
 </style>
 </head>
 <body>
@@ -183,6 +219,9 @@
   <div class="section-title">🚨 Stations à risque (vides)</div>
   <div id="risk-list"><div id="risk-empty">Chargement...</div></div>
 
+  <div class="section-title">⚖️ Suggestions de rééquilibrage</div>
+  <div id="rebalancing-list"><div id="rebalancing-empty">Chargement...</div></div>
+
   <div class="section-title">Légende</div>
   <div class="legend">
     <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> Beaucoup de vélos</div>
@@ -203,18 +242,20 @@
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
+  // Palette alignée sur le niveau d'occupation calculé côté API
+  // (voir niveau_station() dans api/main.py) : 1=critique .. 5=saturé.
+  const NIVEAU_COLORS = { 1: "#ef4444", 2: "#f97316", 3: "#22c55e", 4: "#38bdf8", 5: "#a855f7" };
+
   const clusterGroup = L.markerClusterGroup({
     maxClusterRadius: 45,
     iconCreateFunction: function(cluster) {
       const markers = cluster.getAllChildMarkers();
       let sum = 0, n = 0;
       markers.forEach(m => {
-        if (m.options.__value != null) { sum += m.options.__value; n++; }
+        if (m.options.__niveau != null) { sum += m.options.__niveau; n++; }
       });
-      const avg = n ? sum / n : 0;
-      let color = "#64748b";
-      if (avg > 0) color = avg < 3 ? "#f59e0b" : "#22c55e";
-      if (n && avg === 0) color = "#ef4444";
+      const avgNiveau = n ? Math.round(sum / n) : null;
+      const color = avgNiveau ? NIVEAU_COLORS[avgNiveau] : "#64748b";
       const size = cluster.getChildCount() < 10 ? 34 : cluster.getChildCount() < 50 ? 40 : 48;
       return L.divIcon({
         html: `<div style="
@@ -234,6 +275,10 @@
   });
   map.addLayer(clusterGroup);
 
+  // Couche séparée (non clusterisée) pour les anneaux pulsants des stations
+  // à rééquilibrer : elles doivent rester visibles à tous les niveaux de zoom.
+  const rebalanceLayer = L.layerGroup().addTo(map);
+
   let allStations = [];
   let predictionsByStation = {};
   let mode = "current"; // "current" | "predicted"
@@ -248,12 +293,25 @@
     return station.num_bikes_available;
   }
 
+  // Secours si jamais l'API ne renvoie pas encore de niveau (compat rétro) :
+  // recalcule une couleur approximative à partir de la valeur brute.
   function colorFor(value, capacity) {
     if (value === null || value === undefined) return "#64748b";
     if (value <= 0) return "#ef4444";
     const ratio = capacity ? value / capacity : 0;
     if (ratio < 0.2) return "#f59e0b";
     return "#22c55e";
+  }
+
+  // Niveau + couleur "officiels" d'une station : ceux calculés par l'API
+  // (niveau_station() dans api/main.py), avec repli sur colorFor() si absents.
+  function niveauAndColorFor(station, prediction) {
+    const source = mode === "predicted" ? prediction : station;
+    if (source && source.color && source.niveau != null) {
+      return { niveau: source.niveau, color: source.color };
+    }
+    const value = valueFor(station);
+    return { niveau: null, color: colorFor(value, station.capacity) };
   }
 
   function buildSparklineSVG(history) {
@@ -322,9 +380,10 @@
 
   async function loadStations() {
     try {
-      const [stationsRes, predictionsRes] = await Promise.all([
+      const [stationsRes, predictionsRes, rebalancingRes] = await Promise.all([
         fetch('/stations'),
-        fetch('/predictions').catch(() => null)
+        fetch('/predictions').catch(() => null),
+        fetch('/rebalancing').catch(() => null)
       ]);
       const stations = await stationsRes.json();
       allStations = stations;
@@ -335,9 +394,15 @@
         predictions.forEach(p => { predictionsByStation[p.station_id] = p; });
       }
 
+      let rebalancing = [];
+      if (rebalancingRes && rebalancingRes.ok) {
+        rebalancing = await rebalancingRes.json();
+      }
+
       renderMarkers(lastFiltered || stations);
       updatePanel(stations);
       updateRiskList(stations);
+      updateRebalancingList(rebalancing);
     } catch (err) {
       document.getElementById('stat-count').textContent = "erreur";
       console.error(err);
@@ -350,8 +415,9 @@
     stations.forEach(s => {
       if (s.lat == null || s.lon == null) return;
       const value = valueFor(s);
-      const color = colorFor(value, s.capacity);
-      const isCritical = value === 0;
+      const prediction = predictionsByStation[s.station_id];
+      const { niveau, color } = niveauAndColorFor(s, prediction);
+      const isCritical = niveau === 1 || value === 0;
 
       const marker = L.circleMarker([s.lat, s.lon], {
         radius: 6,
@@ -361,6 +427,7 @@
         opacity: 0.9,
         fillOpacity: 0.9,
         __value: value,
+        __niveau: niveau,
         className: isCritical ? "marker-critical" : ""
       });
 
@@ -408,6 +475,50 @@
         const lat = parseFloat(el.dataset.lat), lon = parseFloat(el.dataset.lon);
         map.flyTo([lat, lon], 17, { duration: 0.8 });
       });
+    });
+  }
+
+  function updateRebalancingList(alerts) {
+    rebalanceLayer.clearLayers();
+
+    const container = document.getElementById('rebalancing-list');
+    if (!alerts || alerts.length === 0) {
+      container.innerHTML = '<div id="rebalancing-empty">Aucune suggestion pour l\'instant</div>';
+      return;
+    }
+
+    const top = alerts.slice(0, 8);
+
+    container.innerHTML = top.map(a => {
+      const icon = a.type === "penurie" ? "🟠" : "🔵";
+      const label = a.type === "penurie" ? "pénurie" : "saturation";
+      return `
+        <div class="rebalance-item ${a.type}" data-lat="${a.lat}" data-lon="${a.lon}">
+          <span class="rb-name">${icon} ${a.name}</span>
+          <span class="rb-value">${a.predicted_num_bikes_available}/${a.capacity} (${label})</span>
+        </div>
+      `;
+    }).join("");
+
+    container.querySelectorAll('.rebalance-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const lat = parseFloat(el.dataset.lat), lon = parseFloat(el.dataset.lon);
+        map.flyTo([lat, lon], 17, { duration: 0.8 });
+      });
+    });
+
+    // Anneaux pulsants sur la carte pour repérer visuellement ces stations,
+    // visibles à tous les zooms (hors clustering).
+    alerts.forEach(a => {
+      if (a.lat == null || a.lon == null) return;
+      const color = a.type === "penurie" ? "#f59e0b" : "#38bdf8";
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="marker-rebalance-ring" style="width:26px;height:26px;border:2.5px solid ${color};"></div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
+      });
+      L.marker([a.lat, a.lon], { icon, interactive: false }).addTo(rebalanceLayer);
     });
   }
 

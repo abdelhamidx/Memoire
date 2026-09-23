@@ -1,0 +1,36 @@
+{
+  "step_minutes_observed": 5.0385553,
+  "features": [
+    "hour",
+    "day_of_week",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "temperature_c",
+    "precipitation_mm",
+    "wind_speed_kmh"
+  ],
+  "horizons": {
+    "15": {
+      "steps": 3,
+      "mae_model": 3.775,
+      "mae_baseline": 2.029,
+      "use_model": false,
+      "n_train_rows": 104535
+    },
+    "30": {
+      "steps": 6,
+      "mae_model": 4.623,
+      "mae_baseline": 3.082,
+      "use_model": false,
+      "n_train_rows": 99990
+    },
+    "60": {
+      "steps": 12,
+      "mae_model": 5.511,
+      "mae_baseline": 4.936,
+      "use_model": false,
+      "n_train_rows": 90900
+    }
+  }
+}

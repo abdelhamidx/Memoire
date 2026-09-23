@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Administration — Vélib' Prévision</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛠️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1220;
+    --card: #141c2e;
+    --card-border: rgba(255,255,255,0.08);
+    --text: #e5e9f0;
+    --text-dim: #93a0b4;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --orange: #f59e0b;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100%;
+    font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0;
+    background: rgba(11,18,32,0.95);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+  header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header .links { display: flex; gap: 16px; align-items: center; }
+  header a { font-size: 13px; color: var(--text-dim); text-decoration: none; }
+  header a:hover { color: var(--accent); }
+
+  main { padding: 20px; max-width: 900px; margin: 0 auto; }
+
+  h2 { font-size: 15px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin: 28px 0 12px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  form.create-user {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  form.create-user .full { grid-column: 1 / -1; }
+  label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 5px; }
+  input, select {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 11px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    color: white;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button.secondary {
+    background: rgba(255,255,255,0.08);
+  }
+  button.danger { background: rgba(248,113,113,0.18); color: var(--danger); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  th, td { text-align: left; padding: 10px 8px; font-size: 13px; border-bottom: 1px solid var(--card-border); }
+  th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+  .role-badge {
+    font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    text-transform: uppercase;
+    background: rgba(56,189,248,0.15); color: var(--accent);
+  }
+  .role-badge.admin { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.active { background: var(--green); }
+  .status-dot.inactive { background: var(--danger); }
+  .row-actions { display: flex; gap: 6px; }
+  .row-actions button { padding: 6px 10px; font-size: 12px; }
+
+  .msg { font-size: 13px; margin-top: 10px; display: none; padding: 8px 10px; border-radius: 8px; }
+  .msg.success { display: block; background: rgba(34,197,94,0.12); color: var(--green); }
+  .msg.error { display: block; background: rgba(248,113,113,0.12); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛠️ Administration</h1>
+  <div class="links">
+    <a href="/">Carte</a>
+    <a href="/ops">Espace chauffeur</a>
+    <a href="#" id="logout-link">Déconnexion</a>
+  </div>
+</header>
+
+<main>
+  <h2>Créer un compte</h2>
+  <div class="card">
+    <form class="create-user" id="create-user-form">
+      <div>
+        <label for="email">Email</label>
+        <input id="email" type="email" required placeholder="chauffeur1@velib.local" />
+      </div>
+      <div>
+        <label for="password">Mot de passe</label>
+        <input id="password" type="text" required placeholder="mot de passe temporaire" />
+      </div>
+      <div>
+        <label for="full_name">Nom complet</label>
+        <input id="full_name" type="text" placeholder="Optionnel" />
+      </div>
+      <div>
+        <label for="role">Rôle</label>
+        <select id="role">
+          <option value="chauffeur">Chauffeur</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="full">
+        <button type="submit" id="create-btn">+ Créer le compte</button>
+        <div class="msg" id="create-msg"></div>
+      </div>
+    </form>
+  </div>
+
+  <h2>Comptes existants</h2>
+  <div class="card">
+    <table id="users-table">
+      <thead>
+        <tr>
+          <th>Statut</th>
+          <th>Email</th>
+          <th>Nom</th>
+          <th>Rôle</th>
+          <th>Créé le</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="users-tbody">
+        <tr><td colspan="6">Chargement...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+  const token = localStorage.getItem('velib_token');
+  const userRaw = localStorage.getItem('velib_user');
+  if (!token || !userRaw) {
+    window.location.href = '/login';
+  }
+  const currentUser = JSON.parse(userRaw || '{}');
+  if (currentUser.role !== 'admin') {
+    // Un chauffeur qui atterrit ici par erreur est renvoyé vers son espace.
+    window.location.href = '/ops';
+  }
+
+  document.getElementById('logout-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    localStorage.removeItem('velib_token');
+    localStorage.removeItem('velib_user');
+    window.location.href = '/login';
+  });
+
+  async function authFetch(url, options = {}) {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('velib_token');
+      localStorage.removeItem('velib_user');
+      window.location.href = '/login';
+      throw new Error('Session expirée');
+    }
+    return res;
+  }
+
+  async function loadUsers() {
+    const tbody = document.getElementById('users-tbody');
+    try {
+      const res = await authFetch('/admin/users');
+      const users = await res.json();
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="6">Aucun compte.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr data-id="${u.id}">
+          <td><span class="status-dot ${u.is_active ? 'active' : 'inactive'}"></span>${u.is_active ? 'Actif' : 'Désactivé'}</td>
+          <td>${u.email}</td>
+          <td>${u.full_name || '—'}</td>
+          <td><span class="role-badge ${u.role}">${u.role}</span></td>
+          <td>${new Date(u.created_at).toLocaleDateString('fr-FR')}</td>
+          <td class="row-actions">
+            <button class="secondary" onclick="toggleRole(${u.id}, '${u.role}')">
+              → ${u.role === 'admin' ? 'chauffeur' : 'admin'}
+            </button>
+            <button class="${u.is_active ? 'danger' : 'secondary'}" onclick="toggleActive(${u.id}, ${u.is_active})">
+              ${u.is_active ? 'Désactiver' : 'Réactiver'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="6">Erreur de chargement.</td></tr>';
+    }
+  }
+
+  async function toggleRole(id, currentRole) {
+    const newRole = currentRole === 'admin' ? 'chauffeur' : 'admin';
+    await authFetch(`/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole }),
+    });
+    loadUsers();
+  }
+
+  async function toggleActive(id, currentlyActive) {
+    await authFetch(`/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !currentlyActive }),
+    });
+    loadUsers();
+  }
+
+  document.getElementById('create-user-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('create-btn');
+    const msg = document.getElementById('create-msg');
+    msg.className = 'msg';
+    btn.disabled = true;
+
+    const payload = {
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('password').value,
+      full_name: document.getElementById('full_name').value.trim() || null,
+      role: document.getElementById('role').value,
+    };
+
+    try {
+      const res = await authFetch('/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Erreur lors de la création");
+      }
+      msg.textContent = `Compte ${payload.email} créé.`;
+      msg.className = 'msg success';
+      document.getElementById('create-user-form').reset();
+      loadUsers();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = 'msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  loadUsers();
+</script>
+
+</body>
+</html>

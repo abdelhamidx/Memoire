@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Espace Chauffeur — Vélib' Prévision</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚚</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1220;
+    --card: #141c2e;
+    --card-border: rgba(255,255,255,0.08);
+    --text: #e5e9f0;
+    --text-dim: #93a0b4;
+    --accent: #38bdf8;
+    --orange: #f59e0b;
+    --green: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100%;
+    font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0;
+    background: rgba(11,18,32,0.95);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+  header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header .back { font-size: 13px; color: var(--text-dim); text-decoration: none; }
+  header .back:hover { color: var(--accent); }
+
+  .agent-bar {
+    padding: 10px 20px;
+    display: flex; gap: 8px; align-items: center;
+    border-bottom: 1px solid var(--card-border);
+    font-size: 13px; color: var(--text-dim);
+  }
+  .agent-bar input {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    width: 160px;
+  }
+
+  main { padding: 16px; max-width: 720px; margin: 0 auto; }
+
+  .summary {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+    margin-bottom: 18px;
+  }
+  .summary .tile {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+  }
+  .summary .tile .n { font-size: 22px; font-weight: 800; }
+  .summary .tile .l { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+  #empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  #empty-state .emoji { font-size: 40px; margin-bottom: 10px; }
+
+  .alert-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-left: 4px solid var(--orange);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .alert-card.saturation { border-left-color: var(--accent); }
+
+  .alert-card .top-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .alert-card .station-name { font-size: 16px; font-weight: 700; }
+  .alert-card .badge {
+    font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    background: rgba(245,158,11,0.15); color: var(--orange);
+    white-space: nowrap;
+  }
+  .alert-card.saturation .badge { background: rgba(56,189,248,0.15); color: var(--accent); }
+
+  .alert-card .detail-row {
+    display: flex; justify-content: space-between;
+    font-size: 13px; color: var(--text-dim);
+    margin: 4px 0;
+  }
+  .alert-card .detail-row b { color: var(--text); }
+
+  .alert-card .action-line {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    font-size: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .alert-card .action-line .qty { font-size: 20px; font-weight: 800; color: var(--orange); }
+  .alert-card.saturation .action-line .qty { color: var(--accent); }
+
+  .alert-card button {
+    width: 100%;
+    margin-top: 12px;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .alert-card button:active { transform: scale(0.98); }
+  .alert-card button:disabled { opacity: 0.5; cursor: default; }
+
+  .maps-link {
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚚 Espace Chauffeur</h1>
+  <div style="display:flex; align-items:center; gap:16px;">
+    <div style="position:relative;">
+      <button id="bell-btn" aria-label="Notifications" style="background:none; border:none; cursor:pointer; font-size:20px; padding:4px; position:relative;">
+        🔔
+        <span id="notif-badge" style="display:none; position:absolute; top:-2px; right:-2px; background:#f87171; color:white; font-size:10px; font-weight:700; min-width:16px; height:16px; border-radius:8px; align-items:center; justify-content:center; padding:0 4px;">0</span>
+      </button>
+      <div id="notif-panel" style="display:none; position:absolute; right:0; top:36px; width:320px; max-height:400px; overflow-y:auto; background:#141c2e; border:1px solid rgba(255,255,255,0.08); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.4); z-index:20;"></div>
+    </div>
+    <a class="back" href="/">← Voir la carte</a>
+  </div>
+</header>
+
+<div class="agent-bar">
+  <span id="agent-name-display">…</span>
+  <span id="refresh-status" style="margin-left:auto;">Actualisation auto (30s)</span>
+  <a href="#" id="logout-link" class="back" style="margin-left:12px;">Déconnexion</a>
+</div>
+
+<main>
+  <div class="summary">
+    <div class="tile"><div class="n" id="count-total">–</div><div class="l">À traiter</div></div>
+    <div class="tile"><div class="n" id="count-penurie">–</div><div class="l">Pénuries</div></div>
+    <div class="tile"><div class="n" id="count-saturation">–</div><div class="l">Saturations</div></div>
+  </div>
+
+  <div id="alerts-container"></div>
+</main>
+
+<footer>Vélib' Prévision — Tournée triée par priorité (station la plus critique en premier)</footer>
+
+<script>
+  const container = document.getElementById('alerts-container');
+
+  // --- Authentification -----------------------------------------------
+  const token = localStorage.getItem('velib_token');
+  const userRaw = localStorage.getItem('velib_user');
+  if (!token || !userRaw) {
+    window.location.href = '/login';
+  }
+  const currentUser = JSON.parse(userRaw || '{}');
+  document.getElementById('agent-name-display').textContent =
+    currentUser.full_name || currentUser.email || 'Chauffeur';
+
+  document.getElementById('logout-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    localStorage.removeItem('velib_token');
+    localStorage.removeItem('velib_user');
+    window.location.href = '/login';
+  });
+
+  function authHeaders() {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+
+  async function authFetch(url, options = {}) {
+    const res = await fetch(url, {
+      ...options,
+      headers: { ...(options.headers || {}), ...authHeaders() },
+    });
+    if (res.status === 401) {
+      // Token expiré/invalide : retour à la connexion.
+      localStorage.removeItem('velib_token');
+      localStorage.removeItem('velib_user');
+      window.location.href = '/login';
+      throw new Error('Session expirée');
+    }
+    return res;
+  }
+
+  async function loadAlerts() {
+    try {
+      const res = await authFetch('/rebalancing');
+      if (!res.ok) throw new Error("erreur API");
+      const alerts = await res.json();
+      render(alerts);
+    } catch (err) {
+      container.innerHTML = `<div id="empty-state"><div class="emoji">⚠️</div>Impossible de charger les alertes.<br>Vérifie que l'API et le modèle sont disponibles.</div>`;
+    }
+  }
+
+  function render(alerts) {
+    document.getElementById('count-total').textContent = alerts.length;
+    document.getElementById('count-penurie').textContent = alerts.filter(a => a.type === 'penurie').length;
+    document.getElementById('count-saturation').textContent = alerts.filter(a => a.type === 'saturation').length;
+
+    if (alerts.length === 0) {
+      container.innerHTML = `<div id="empty-state"><div class="emoji">🎉</div>Aucune station à rééquilibrer pour l'instant.<br>Bonne tournée !</div>`;
+      return;
+    }
+
+    container.innerHTML = alerts.map((a, i) => {
+      const isPenurie = a.type === "penurie";
+      const actionLabel = isPenurie ? "vélos à charger" : "vélos à décharger";
+      const gmaps = `https://www.google.com/maps/search/?api=1&query=${a.lat},${a.lon}`;
+      return `
+        <div class="alert-card ${a.type}" data-station-id="${a.station_id}">
+          <div class="top-row">
+            <div class="station-name">${i + 1}. ${a.name}</div>
+            <div class="badge">${isPenurie ? "Pénurie" : "Saturation"}</div>
+          </div>
+          <div class="detail-row"><span>Prédiction</span><b>${a.predicted_num_bikes_available} / ${a.capacity} vélos</b></div>
+          <div class="detail-row"><span>Itinéraire</span><a class="maps-link" href="${gmaps}" target="_blank">Ouvrir dans Maps →</a></div>
+          <div class="action-line">
+            <span class="qty">${a.suggested_quantity}</span>
+            <span>${actionLabel} (objectif : mi-capacité)</span>
+          </div>
+          <button onclick="markHandled('${a.station_id}', '${a.type}', ${a.suggested_quantity}, this)">
+            ✓ Marquer comme traité
+          </button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  async function markHandled(stationId, actionType, quantity, btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = "Enregistrement...";
+    try {
+      const params = new URLSearchParams({
+        action_type: actionType,
+        suggested_quantity: quantity,
+      });
+      await authFetch(`/rebalancing/${stationId}/handled?${params}`, { method: "POST" });
+      const card = btnEl.closest('.alert-card');
+      card.style.opacity = "0.4";
+      btnEl.textContent = "✓ Traité";
+      setTimeout(loadAlerts, 600);
+    } catch (err) {
+      btnEl.disabled = false;
+      btnEl.textContent = "✓ Marquer comme traité";
+      alert("Erreur, réessaie.");
+    }
+  }
+
+  // --- Notifications ----------------------------------------------------
+  const bellBtn = document.getElementById('bell-btn');
+  const notifBadge = document.getElementById('notif-badge');
+  const notifPanel = document.getElementById('notif-panel');
+
+  async function refreshUnreadCount() {
+    try {
+      const res = await authFetch('/notifications/unread-count');
+      const data = await res.json();
+      if (data.unread_count > 0) {
+        notifBadge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+        notifBadge.style.display = 'flex';
+      } else {
+        notifBadge.style.display = 'none';
+      }
+    } catch (err) { /* silencieux, on retentera au prochain cycle */ }
+  }
+
+  async function loadNotifications() {
+    notifPanel.innerHTML = '<div style="padding:14px; font-size:13px; color:#93a0b4;">Chargement...</div>';
+    try {
+      const res = await authFetch('/notifications?limit=20');
+      const notifs = await res.json();
+      if (!notifs.length) {
+        notifPanel.innerHTML = '<div style="padding:14px; font-size:13px; color:#93a0b4;">Aucune notification.</div>';
+        return;
+      }
+      notifPanel.innerHTML = notifs.map(n => `
+        <div data-id="${n.id}" style="padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.06); font-size:13px; ${n.is_read ? 'opacity:0.5;' : ''} cursor:pointer;" onclick="markNotifRead(${n.id}, this)">
+          <div style="font-weight:${n.is_read ? '400' : '700'};">${n.message}</div>
+          <div style="font-size:11px; color:#93a0b4; margin-top:3px;">${new Date(n.created_at).toLocaleString('fr-FR')}</div>
+        </div>
+      `).join('');
+    } catch (err) {
+      notifPanel.innerHTML = '<div style="padding:14px; font-size:13px; color:#93a0b4;">Erreur de chargement.</div>';
+    }
+  }
+
+  async function markNotifRead(id, el) {
+    el.style.opacity = '0.5';
+    el.style.fontWeight = '400';
+    try {
+      await authFetch(`/notifications/${id}/read`, { method: 'POST' });
+      refreshUnreadCount();
+    } catch (err) { /* pas grave, on retentera */ }
+  }
+  window.markNotifRead = markNotifRead;
+
+  bellBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = notifPanel.style.display === 'block';
+    notifPanel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) loadNotifications();
+  });
+  document.addEventListener('click', (e) => {
+    if (!notifPanel.contains(e.target) && e.target !== bellBtn) {
+      notifPanel.style.display = 'none';
+    }
+  });
+
+  loadAlerts();
+  refreshUnreadCount();
+  setInterval(loadAlerts, 30000);
+  setInterval(refreshUnreadCount, 30000);
+</script>
+
+</body>
+</html>

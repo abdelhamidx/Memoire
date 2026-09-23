@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connexion — Vélib' Prévision</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚲</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1220;
+    --card: #141c2e;
+    --card-border: rgba(255,255,255,0.08);
+    --text: #e5e9f0;
+    --text-dim: #93a0b4;
+    --accent: #38bdf8;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100%;
+    font-family: 'Inter', -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 100%; max-width: 380px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 32px;
+    margin: 16px;
+  }
+  .logo { font-size: 32px; text-align: center; margin-bottom: 4px; }
+  h1 { font-size: 18px; text-align: center; margin: 0 0 4px; }
+  .subtitle { font-size: 13px; color: var(--text-dim); text-align: center; margin-bottom: 24px; }
+
+  label { font-size: 13px; color: var(--text-dim); display: block; margin-bottom: 6px; margin-top: 14px; }
+  input {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 11px 12px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+
+  button {
+    width: 100%;
+    margin-top: 22px;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  .error {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: rgba(248,113,113,0.12);
+    border: 1px solid rgba(248,113,113,0.3);
+    color: var(--danger);
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+  }
+
+  .hint {
+    margin-top: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">🚲</div>
+  <h1>Vélib' Prévision</h1>
+  <div class="subtitle">Connecte-toi pour accéder à ton espace</div>
+
+  <form id="login-form">
+    <label for="email">Email</label>
+    <input id="email" type="email" required autocomplete="username" placeholder="toi@velib.local" />
+
+    <label for="password">Mot de passe</label>
+    <input id="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+
+    <button type="submit" id="submit-btn">Se connecter</button>
+    <div class="error" id="error-box"></div>
+  </form>
+
+  <div class="hint">Compte chauffeur ou admin créé par ton administrateur.</div>
+</div>
+
+<script>
+  const form = document.getElementById('login-form');
+  const errorBox = document.getElementById('error-box');
+  const submitBtn = document.getElementById('submit-btn');
+
+  // Déjà connecté ? on redirige direct.
+  const existingToken = localStorage.getItem('velib_token');
+  const existingUser = localStorage.getItem('velib_user');
+  if (existingToken && existingUser) {
+    try {
+      const user = JSON.parse(existingUser);
+      window.location.href = user.role === 'admin' ? '/admin' : '/ops';
+    } catch (e) { /* token corrompu, on laisse la page de login s'afficher */ }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Connexion...';
+
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Échec de la connexion");
+      }
+
+      const data = await res.json();
+      localStorage.setItem('velib_token', data.access_token);
+      localStorage.setItem('velib_user', JSON.stringify(data.user));
+
+      window.location.href = data.user.role === 'admin' ? '/admin' : '/ops';
+    } catch (err) {
+      errorBox.textContent = err.message || "Erreur de connexion, réessaie.";
+      errorBox.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Se connecter';
+    }
+  });
+</script>
+
+</body>
+</html>
